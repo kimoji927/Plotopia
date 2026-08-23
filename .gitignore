@@ -1,0 +1,59 @@
+# ============================================================
+# Unreal Engine 项目 .gitignore
+# 适用版本: UE 5.7 (Plotopia)
+# ============================================================
+
+# ---------- UE 自动生成/缓存目录（绝不提交） ----------
+# 编译产物（DLL/obj 等，重新编译会重新生成）
+Binaries/
+**/Binaries/
+
+# 构建中间文件（UBT/UHT 生成，体积巨大）
+Intermediate/
+**/Intermediate/
+
+# 派生数据缓存（着色器/烘焙缓存，可达几十 GB）
+DerivedDataCache/
+**/DerivedDataCache/
+
+# 编辑器本地状态（日志、配置、布局）
+Saved/
+**/Saved/
+
+# ---------- IDE 配置（本地个人配置，不提交） ----------
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userprefs
+*.DotSettings.user
+
+# ---------- Windows 系统文件 ----------
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+*.pdb
+*.ipdb
+*.iobj
+
+# ---------- 日志与临时文件 ----------
+*.log
+*.tmp
+*.bak
+*.orig
+
+# ---------- 第三方免费资产（不提交，体积巨大且 Epic 商城可免费获取） ----------
+# 这些目录属于 Epic Games 提供的免费示例/角色资产（合计约 9GB）：
+# - ParagonBoris / ParagonMinions: Epic 免费角色
+# - Stylized_Spruce_Forest: Epic 免费 PCG 森林场景
+# - NiagaraExamples: 引擎自带 Niagara 示例
+# 克隆后如需完整运行，请从 Epic Games Launcher 的 Marketplace 重新下载同名免费资产
+Content/ParagonBoris/
+Content/ParagonMinions/
+Content/Stylized_Spruce_Forest/
+Content/NiagaraExamples/
+
+# ---------- 保持提交的文件（显式例外） ----------
+# .uproject / Config / Source / Content/GAS 是需要入库的核心内容（约 25MB）
+# Content/GAS 为自创资产，全部入库；第三方资产见上方排除规则

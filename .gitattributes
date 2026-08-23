@@ -1,0 +1,51 @@
+# ============================================================
+# Unreal Engine 项目 .gitattributes
+# 适用版本: UE 5.7 (Plotopia)
+# ============================================================
+
+# ---------- 文本规范化 ----------
+# 所有文本文件统一使用 LF 行尾（避免 Windows CRLF 造成 diff 噪音）
+* text=auto
+
+*.h    text eol=lf
+*.cpp  text eol=lf
+*.cs   text eol=lf
+*.ini  text eol=lf
+*.uproject text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+
+# ---------- UE 二进制资产（禁止 diff/合并，避免二进制冲突） ----------
+*.uasset binary
+*.umap   binary
+*.T3D    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.tga    binary
+*.wav    binary
+*.mp3    binary
+*.ogg    binary
+*.fbx    binary
+*.obj    binary
+*.psk    binary
+*.pskx   binary
+*.dll    binary
+*.exe    binary
+*.lib    binary
+*.pdb    binary
+*.uplugin binary
+
+# ---------- Git LFS 预留规则（当前未启用） ----------
+# 当前仓库自创资产约 25MB，远低于 GitHub 100MB 单文件限制，无需 LFS。
+# 若未来自创资产（Content/GAS）出现超大文件（如 4K 纹理/高模），
+# 启用方式：
+#   1. 安装 Git LFS:  git lfs install
+#   2. 启用下方规则并提交 .gitattributes
+#   3. 已跟踪的大文件需用  git lfs migrate import --include="*.uasset,*.umap" 迁移
+# 注意：GitHub 免费 LFS 额度为 1GB 存储 / 1GB 月流量，请谨慎使用。
+#
+# *.uasset filter=lfs diff=lfs merge=lfs -text
+# *.umap   filter=lfs diff=lfs merge=lfs -text
+# *.fbx    filter=lfs diff=lfs merge=lfs -text
+# *.png    filter=lfs diff=lfs merge=lfs -text
