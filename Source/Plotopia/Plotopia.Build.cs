@@ -15,7 +15,7 @@ public class Plotopia : ModuleRules
 		// 编辑器专用依赖：仅编辑器构建时链接（蓝图诊断/清理命令let使用）
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "BlueprintGraph", "Kismet", "UMGEditor" });
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "BlueprintGraph", "Kismet", "UMGEditor", "PCG" });
 		}
 
 		// Uncomment if you are using Slate UI

@@ -44,15 +44,25 @@ ehthumbs.db
 *.orig
 
 # ---------- 第三方免费资产（不提交，体积巨大且 Epic 商城可免费获取） ----------
-# 这些目录属于 Epic Games 提供的免费示例/角色资产（合计约 9GB）：
+# 这些目录属于 Epic Games 提供的免费示例/角色/场景资产（合计约 10GB）：
 # - ParagonBoris / ParagonMinions: Epic 免费角色
 # - Stylized_Spruce_Forest: Epic 免费 PCG 森林场景
+# - Fantastic_Village_Pack: Epic 免费奇幻村庄资产
 # - NiagaraExamples: 引擎自带 Niagara 示例
 # 克隆后如需完整运行，请从 Epic Games Launcher 的 Marketplace 重新下载同名免费资产
 Content/ParagonBoris/
 Content/ParagonMinions/
 Content/Stylized_Spruce_Forest/
 Content/NiagaraExamples/
+Content/Fantastic_Village_Pack/
+
+# ---------- UE OFPA 外部 Actor 存储（体积不可控，不提交） ----------
+# __ExternalActors__ 是 UE5 的 "One File Per Actor" 存储目录，由编辑器自动生成。
+# 本项目中 kaifang 关卡内的 PCGWorldActor 会序列化地形缓存（LandscapeCache），
+# 单个文件曾膨胀至 189MB，远超 GitHub 的 100MB 单文件限制，故整体排除。
+# 如需提交某关卡的外部 Actor，请在编辑器中关闭 PCG 地形缓存序列化后再放开此规则。
+Content/__ExternalActors__/
+Content/__ExternalObjects__/
 
 # ---------- 保持提交的文件（显式例外） ----------
 # .uproject / Config / Source / Content/GAS 是需要入库的核心内容（约 25MB）
