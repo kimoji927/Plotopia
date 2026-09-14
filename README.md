@@ -8,15 +8,13 @@
 
 ## ✨ 效果展示
 
-> 📌 **截图待补充**：将截图放入 `Screenshots/` 目录后即可正常显示
-
 | 程序化建筑生成 | 转角模型匹配 |
 |:---:|:---:|
-| ![建筑生成](Screenshots/PCG_Building_01.png) | ![转角匹配](Screenshots/PCG_Corner_01.png) |
+| ![程序化建筑生成](Screenshots/PCG_Building.jpg) | ![转角模型匹配](Screenshots/PCG_Corner.jpg) |
 
 | 样条驱动生成 | 场景与植被 |
 |:---:|:---:|
-| ![样条生成](Screenshots/PCG_Spline_01.png) | ![场景植被](Screenshots/PCG_Scene_01.png) |
+| ![样条驱动生成](Screenshots/PCG_Spline.jpg) | ![场景与植被](Screenshots/PCG_Vegetation.jpg) |
 
 **演示视频**：【B 站链接待补充】
 

@@ -64,6 +64,11 @@ Content/Fantastic_Village_Pack/
 Content/__ExternalActors__/
 Content/__ExternalObjects__/
 
+# ---------- 截图原始素材（高分辨率原图，不提交） ----------
+# Screenshots/ 下提交的是压缩后的 .jpg（用于 README 展示，总计约 2MB）；
+# 原始高分辨率 PNG 保留在本地 _original_png/ 供后续使用，不入库。
+Screenshots/_original_png/
+
 # ---------- 保持提交的文件（显式例外） ----------
 # .uproject / Config / Source / Content/GAS 是需要入库的核心内容（约 25MB）
 # Content/GAS 为自创资产，全部入库；第三方资产见上方排除规则
