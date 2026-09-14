@@ -56,13 +56,16 @@ Content/Stylized_Spruce_Forest/
 Content/NiagaraExamples/
 Content/Fantastic_Village_Pack/
 
-# ---------- UE OFPA 外部 Actor 存储（体积不可控，不提交） ----------
+# ---------- UE OFPA 外部 Actor 存储 ----------
 # __ExternalActors__ 是 UE5 的 "One File Per Actor" 存储目录，由编辑器自动生成。
-# 本项目中 kaifang 关卡内的 PCGWorldActor 会序列化地形缓存（LandscapeCache），
-# 单个文件曾膨胀至 189MB，远超 GitHub 的 100MB 单文件限制，故整体排除。
-# 如需提交某关卡的外部 Actor，请在编辑器中关闭 PCG 地形缓存序列化后再放开此规则。
-Content/__ExternalActors__/
-Content/__ExternalObjects__/
+# 本项目曾因 kaifang 关卡内的 PCGWorldActor 序列化地形缓存（LandscapeCache，
+# EPCGLandscapeCacheSerializationMode::AlwaysSerialize）导致单文件膨胀至 189MB，
+# 超过 GitHub 100MB 限制；已在编辑器中将缓存序列化模式关闭，体积降至 32MB，故正常入库。
+#
+# ⚠️ 维护提醒：若该目录再次异常膨胀（单文件 >50MB），请先检查 PCG 地形缓存设置，
+#    必要时临时在下方启用排除规则。
+# Content/__ExternalActors__/
+# Content/__ExternalObjects__/
 
 # ---------- 截图原始素材（高分辨率原图，不提交） ----------
 # Screenshots/ 下提交的是压缩后的 .jpg（用于 README 展示，总计约 2MB）；
