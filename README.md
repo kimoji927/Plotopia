@@ -16,7 +16,7 @@
 |:---:|:---:|
 | ![样条驱动生成](Screenshots/PCG_Spline.jpg) | ![场景与植被](Screenshots/PCG_Vegetation.jpg) |
 
-**演示视频**：【B 站链接待补充】
+**演示视频**：[B 站 · Plotopia Demo](https://www.bilibili.com/video/BV1BkeB6oEpx)
 
 ---
 
@@ -202,7 +202,7 @@ Screenshots/                    # 效果截图（README 展示用）
 
 ## 路线图
 
-- [ ] 补充效果截图与演示视频
+- [x] 补充效果截图与演示视频（[B 站](https://www.bilibili.com/video/BV1BkeB6oEpx)）
 - [ ] 用 C++ 自定义 PCG 节点重构转角判定（位掩码方案），替代现有蓝图节点
 - [ ] 补充 PCG 生成性能数据（CPU / GPU 对比）
 - [ ] 扩展关卡设计：完整可玩区域的程序化生成（地形 → 道路 → 建筑 → 植被 → 敌人刷新点）
