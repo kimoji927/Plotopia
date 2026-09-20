@@ -10,6 +10,7 @@
 class UImage;
 class UTextBlock;
 class UInv_InventoryWidget;
+class UInv_InventoryComponent;
 
 DECLARE_DELEGATE_TwoParams(FOnSlotDragDropSwap, int32, int32);
 
@@ -34,6 +35,14 @@ public:
     /** Get the parent inventory widget (callable from Blueprint) */
     UFUNCTION(BlueprintPure, Category = "Inventory|UI")
     UInv_InventoryWidget* GetParentInventoryWidget() const;
+
+    /** 取背包组件（优先父级背包UI，其次拥有者玩家控制器），蓝图/热键栏格子都可用 */
+    UFUNCTION(BlueprintCallable, Category = "Inventory|UI")
+    UInv_InventoryComponent* GetInventoryComponent() const;
+
+    /** 当前格子里的物品是否为“消耗品”（勾选 bIsConsumable），可用于在WBP里显示“可右键使用”标记 */
+    UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+    bool IsItemConsumable() const;
 
     UFUNCTION(BlueprintCallable, Category = "Inventory|UI")
     int32 GetSlotIndex() const { return SlotIndex; }
@@ -60,6 +69,10 @@ public:
     /** Blueprint event: Called when right-clicked */
     UFUNCTION(BlueprintImplementableEvent, Category = "Inventory|UI")
     void OnRightClicked();
+
+    /** Blueprint event: 右键“使用物品”结果（bSuccess=false 表示这次没有使用成功，可能是配置缺失/已死亡等） */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Inventory|Consumable")
+    void OnItemUsed(bool bSuccess);
 
     /** Blueprint event: Called when a drag operation hovers over this slot */
     UFUNCTION(BlueprintImplementableEvent, Category = "Inventory|DragDrop")

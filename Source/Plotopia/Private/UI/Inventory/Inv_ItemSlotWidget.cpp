@@ -2,6 +2,7 @@
 #include "UI/Inventory/Inv_ItemSlotWidget.h"
 #include "UI/Inventory/Inv_InventoryWidget.h"
 #include "UI/Inventory/Inv_DragDropOperation.h"
+#include "Items/Components/Inv_InventoryComponent.h"
 #include "Player/GAS_PlayerController.h"
 #include "Components/Border.h"
 #include "Blueprint/DragDropOperation.h"
@@ -27,6 +28,38 @@ UInv_InventoryWidget* UInv_ItemSlotWidget::GetParentInventoryWidget() const
 		}
 	}
 	return nullptr;
+}
+
+UInv_InventoryComponent* UInv_ItemSlotWidget::GetInventoryComponent() const
+{
+	// 优先父级背包UI（C++创建的格子），其次拥有者玩家控制器上的背包组件
+	if (UInv_InventoryWidget* Parent = GetParentInventoryWidget())
+	{
+		if (UInv_InventoryComponent* InvComp = Parent->GetInventoryComponent())
+		{
+			return InvComp;
+		}
+	}
+
+	if (APlayerController* PC = GetOwningPlayer())
+	{
+		if (AGAS_PlayerController* GASPC = Cast<AGAS_PlayerController>(PC))
+		{
+			return GASPC->GetInventoryComponent();
+		}
+	}
+	return nullptr;
+}
+
+bool UInv_ItemSlotWidget::IsItemConsumable() const
+{
+	if (!ItemData.IsValid()) return false;
+
+	if (UInv_InventoryComponent* InvComp = GetInventoryComponent())
+	{
+		return InvComp->IsConsumableItem(ItemData.ItemID);
+	}
+	return false;
 }
 
 void UInv_ItemSlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -107,14 +140,34 @@ FReply UInv_ItemSlotWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, c
     }
     else if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
     {
-        // 右键点击：如果槽位有物品，触发数量选择丢弃
         if (ItemData.IsValid())
         {
-            // 通知父背包弹出数量选择器
-            if (IsValid(ParentInventory))
+            // 右键分流：
+            //   消耗品（数据行勾选 bIsConsumable）→ 走GAS使用流程（应用配置的GameplayEffect回血等，并扣除物品）
+            //   非消耗品 → 保持原有行为：弹出数量选择器丢弃
+            // 注意：消耗品分支不因“使用失败”而回退到丢弃框，否则主机(有权限)与客户端(只发RPC)
+            // 的表现会不一致。
+            bool bHandledByUse = false;
+            if (IsItemConsumable())
             {
-                ParentInventory->RequestDropWithQuantity(SlotIndex);
+                if (UInv_InventoryComponent* InvComp = GetInventoryComponent())
+                {
+                    bHandledByUse = true;
+                    // 客户端返回true表示请求已发往服务器；服务器端返回true表示本次使用成功
+                    const bool bUsed = InvComp->UseItemAtSlot(SlotIndex);
+                    OnItemUsed(bUsed);
+                }
             }
+
+            if (!bHandledByUse)
+            {
+                // 非消耗品：通知父背包弹出数量选择器
+                if (UInv_InventoryWidget* ParentWidget = GetParentInventoryWidget())
+                {
+                    ParentWidget->RequestDropWithQuantity(SlotIndex);
+                }
+            }
+
             // 同时保留蓝图事件，方便 WBP 额外处理
             OnRightClicked();
         }

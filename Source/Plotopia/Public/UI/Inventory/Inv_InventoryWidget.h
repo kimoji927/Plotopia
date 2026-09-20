@@ -65,6 +65,15 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Inventory|UI")
     void OnRequestDropQuantity(int32 SlotIndex, int32 MaxQuantity);
 
+    // ==================== 消耗品使用 ====================
+    /** 请求使用槽位中的物品（右键消耗品时由格子控件调用，蓝图按钮也可直接调用） */
+    UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+    bool UseItemAtSlot(int32 SlotIndex);
+
+    /** 该槽位的物品是否为可右键使用的消耗品（用于UI提示/高亮） */
+    UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+    bool IsSlotConsumable(int32 SlotIndex) const;
+
     UFUNCTION(BlueprintPure, Category = "Inventory|UI")
     int32 GetSelectedSlotIndex() const { return SelectedSlotIndex; }
 
@@ -167,6 +176,10 @@ protected:
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UTextBlock> DetailQuantityText;
+
+    /** 可选：详情面板上的“右键使用”提示文本（WBP里没有该控件也不会报错） */
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> DetailUseHintText;
 
     UPROPERTY(BlueprintReadOnly, Category = "Inventory|UI")
     TArray<TObjectPtr<UInv_ItemSlotWidget>> SlotWidgets;

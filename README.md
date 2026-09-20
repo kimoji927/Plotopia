@@ -100,11 +100,30 @@
 - UMG 拖拽交互、滚轮切换快捷栏；死亡时物品随机散落掉落；自定义 `ItemTrace` 碰撞通道实现拾取
 - 性能优化：`ItemCountCache` / `EmptySlotCache` 缓存 + `InventoryVersion` 版本号增量刷新
 
+### 消耗品与 GAS 使用系统（数据驱动）
+
+- **数据表驱动配置**：在 `DT_Items` 中为物品勾选 `Is Consumable` 即可成为消耗品，并可配置使用效果（`Consume Effects` GE 数组，支持多效果叠加）、SetByCaller 数值与标签、扣除数量、Cue / Event 标签等——**C++ 中没有硬编码任何具体 GE 资源**
+- **服务器权威**：使用判定与效果应用只在服务器执行（`Server_UseItemAtSlot` 可靠 RPC），客户端 UI 走既有的版本号 + 缓存刷新通道
+- **快捷栏直接用**：鼠标右键即可使用当前选中槽位的物品（`BindKey(RightMouseButton)`），全程无需打开背包；数字键 `1`-`9` 选中槽位；背包内格子右键走同一套逻辑（共用 `WBP_ItemSlot`）
+- **GAS 集成**：效果以 GameplayEffect 应用在玩家 ASC 上，支持 SetByCaller 数值驱动（一份 GE 复用，数值由数据表决定）、GameplayCue 播特效、GameplayEvent 通知能力层（如吃药动画 / 音效）
+- 完整设计与排查文档见 [`Docs/Inventory_Consumable_GAS.md`](Docs/Inventory_Consumable_GAS.md)
+
 ### UI 与输入
 
-- UMG：HUD（血条 / 蓝条）、背包 / 快捷栏界面、主菜单
+- UMG：HUD（血条 / 蓝条）、背包 / 快捷栏界面、主菜单与联机界面
 - `WidgetComponent` 实现角色头顶血条
 - Enhanced Input 分类管理：移动 / 技能 / 物品 / 菜单操作
+
+### 伤害数字（Niagara 飘字系统）
+
+- 基于 **Niagara** 实现伤害飘字：**数字图集（Atlas）+ 精灵渲染**，按伤害值动态计算数字索引（`CalcDigitIndex.DamageValue`）逐位取字
+- 配合速度、重力衰减、颜色与大小曲线，让伤害反馈清晰直观且不遮挡画面
+
+### 联机与主菜单
+
+- **服务器浏览器**（`WBP_ServerBrowser`）+ 主菜单（`WBP_MainMeun`），配独立的菜单 GameMode / PlayerController（`GM_MainMenu` / `PC_MainMenu`）与菜单输入映射（`IMC_Menu`）
+- 基于 **AdvancedSessions / AdvancedSteamSessions** 插件实现会话的创建、查找与加入；`DefaultEngine.ini` 中已配置 Steam 网络驱动（`OnlineSubsystemSteam.SteamNetDriver`）
+- 通过 `ActiveGameNameRedirects` 与 `CoreRedirects` 管理项目改名后的资产引用，保证旧资产正常加载
 
 ---
 
@@ -124,7 +143,7 @@ Source/Plotopia/
 │   └── Utils/                  # 蓝图工具库
 Content/GAS/
 ├── PCG/
-│   ├── Building/               # ⭐ 程序化建筑生成（PCG_Building / BP_MatchingMesh 等）
+│   ├── Building/               # ⭐ 程序化建筑生成（PCG_Building / BP_MatchingMesh / BP_SetCornerNumber）
 │   ├── PCG_Surface             # 表面采样
 │   ├── PCG_Spline              # 样条采样
 │   ├── PCG_RoadBulid           # 道路生成
@@ -133,9 +152,16 @@ Content/GAS/
 │   └── Junk.umap               # PCG 测试关卡
 ├── AbilitySystem/              # 技能 / GameplayEffect / GameplayCue 蓝图资产
 ├── Characters/                 # 角色蓝图与动画
-├── Items/                      # 物品蓝图与 DataTable
-├── Maps/                       # GASMap（主场景）/ Startup / kaifang
-└── UI/                         # 界面蓝图
+├── Items/                      # 物品蓝图 + DT_Items 数据表（含消耗品配置）
+├── Maps/                       # GASMap（主场景）/ Startup / kaifang（PCG 场景）
+├── UI/
+│   ├── NS_DamageValueFloting   # ⭐ Niagara 伤害飘字系统
+│   ├── Numbers/                # 数字图集与材质（0-9）
+│   ├── HUD/ Inventory/         # 血条 / 背包 / 快捷栏
+│   └── Startup/                # ⭐ 主菜单与服务器浏览器（联机界面）
+└── Game/Startup/               # 菜单 GameMode / PlayerController
+Docs/                           # 系统设计文档（如消耗品 + GAS 使用系统）
+Screenshots/                    # 效果截图（README 展示用）
 ```
 
 ## 运行方式
@@ -145,8 +171,12 @@ Content/GAS/
 3. 首次打开会自动编译 C++ 模块（约 10–20 分钟）
 4. 打开关卡 `Content/GAS/Maps/GASMap` 运行玩法，或打开 `Content/GAS/PCG/Building/` 下的 PCG 资产查看生成效果
 
-> **所需插件**：GameplayAbilities、PCG、PCGGeometryScriptInterop、CommonUI（已在 `.uproject` 中配置）
-> **第三方资产**：Paragon Boris / Paragon Minions、Stylized_Spruce_Forest、Fantastic_Village_Pack（均为 Epic 免费资产，需自行从 Marketplace 下载后放入 Content 目录）
+> **所需插件**：GameplayAbilities、PCG、PCGGeometryScriptInterop、CommonUI、AdvancedSessions / AdvancedSteamSessions（已在 `.uproject` 中配置）
+>
+> **第三方资产**（未入库，需自行获取同名资产放入 `Content/`）：
+> Paragon Boris / Paragon Minions、Stylized_Spruce_Forest、Fantastic_Village_Pack（Epic 免费）、Medieval_MWP（中世纪建筑资产包）、NiagaraExamples（引擎自带）
+>
+> ⚠️ `Content/__ExternalActors__/`（关卡外部 Actor 数据）未入库——该目录曾因 PCG 地形缓存膨胀至单文件 189MB，超出 GitHub 单文件限制。关卡效果请参见 `Screenshots/` 与演示视频。
 
 ## 技术要点备忘
 
@@ -161,7 +191,7 @@ Content/GAS/
 | 问题 | 定位 | 解决 |
 |---|---|---|
 | 蓝图节点爆炸：`BP_SetCornerNumber` 膨胀至 400KB / 上百节点，手工连线易错 | 8 方向探针 + 布尔组合用蓝图表达过于冗长 | 计划改用 C++ 自定义 PCG 节点 + 位掩码重构（见路线图） |
-| 关卡文件 189MB、超过 GitHub 单文件限制 | `PCGWorldActor` 的 `LandscapeCache` 被 `AlwaysSerialize` 序列化 | 关闭地形缓存序列化；`__ExternalActors__` 体积 221MB → 33MB |
+| 关卡文件 189MB、超过 GitHub 单文件限制 | `PCGWorldActor` 的 `LandscapeCache` 被 `AlwaysSerialize` 序列化进关卡 | 关闭地形缓存序列化后一度降至 33MB；但重存关卡后会再次生成（已验证两次），最终选择将 `__ExternalActors__` 整体排除，关卡效果改由截图与视频呈现 |
 | 背包 UI 偶发不刷新 | 数组属性复制时机不可控（可能合并 / 延后） | 增加可靠 RPC 状态推送通道 + 版本号兜底 |
 | 敌人攻击后不及时重新索敌 | 轮询效率低且时机不准 | 改为攻击结束的 GameplayEvent 驱动 |
 

@@ -8,6 +8,7 @@
 #include "Characters/GAS_BaseCharacter.h"
 #include "GameFramework/Character.h"
 #include "GameplayTags/GASTags.h"
+#include "InputCoreTypes.h"
 #include "Items/Components/Inv_InventoryComponent.h"
 #include "Items/Components/Inv_ItemComponent.h"
 #include "Items/Inv_WorldItem.h"
@@ -84,6 +85,27 @@ void AGAS_PlayerController::SetupInputComponent()
 
 	//滚轮切换快捷栏
 	EnhancedInputComponent->BindAction(MouseWheelAction, ETriggerEvent::Triggered, this, &ThisClass::OnMouseWheel);
+
+	//快捷栏“使用物品”：默认鼠标右键，不需要打开背包、不需要配置任何输入资源。
+	//（背包界面打开时鼠标右键由格子控件自己处理，UseSelectedHotbarItem 内部有互斥保护）
+	if (UseItemAction)
+	{
+		// 在BP里指定了输入动作 → 走增强输入，方便自由改键/加手柄键
+		EnhancedInputComponent->BindAction(UseItemAction, ETriggerEvent::Started, this, &ThisClass::OnUseItemInput);
+	}
+	else
+	{
+		InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ThisClass::OnUseItemInput);
+	}
+
+	//数字键 1~9 直接选中快捷栏槽位（选好之后右键即可使用）
+	static const FKey HotbarNumberKeys[] = {
+		EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five,
+		EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+	for (const FKey& NumberKey : HotbarNumberKeys)
+	{
+		InputComponent->BindKey(NumberKey, IE_Pressed, this, &ThisClass::OnHotbarNumberKey);
+	}
 }
 
 void AGAS_PlayerController::Interact()
@@ -514,6 +536,50 @@ void AGAS_PlayerController::HotbarSelectPrevious()
 	if (IsValid(InventoryComponent))
 	{
 		InventoryComponent->SelectPreviousHotbarSlot();
+	}
+}
+
+// ==================== 快捷栏直接使用物品（不用打开背包） ====================
+
+void AGAS_PlayerController::OnUseItemInput()
+{
+	UseSelectedHotbarItem();
+}
+
+bool AGAS_PlayerController::UseSelectedHotbarItem()
+{
+	if (!IsValid(InventoryComponent)) return false;
+
+	//死亡后不能使用物品
+	if (!IsAlive()) return false;
+
+	//背包界面打开时：鼠标右键由背包格子控件自己处理（避免同一次右键被处理两次）
+	if (IsValid(InventoryWidget) && InventoryWidget->IsInventoryVisible()) return false;
+
+	//使用“当前选中的快捷栏槽位”（滚轮切换 / 数字键1~9选择）
+	return InventoryComponent->UseItemAtSlot(InventoryComponent->GetSelectedHotbarSlot());
+}
+
+void AGAS_PlayerController::SelectHotbarSlotByIndex(int32 SlotIndex)
+{
+	if (!IsValid(InventoryComponent)) return;
+
+	InventoryComponent->SelectHotbarSlot(SlotIndex);
+}
+
+void AGAS_PlayerController::OnHotbarNumberKey(FKey Key)
+{
+	static const FKey HotbarNumberKeys[] = {
+		EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five,
+		EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(HotbarNumberKeys); ++Index)
+	{
+		if (Key == HotbarNumberKeys[Index])
+		{
+			SelectHotbarSlotByIndex(Index);
+			return;
+		}
 	}
 }
 

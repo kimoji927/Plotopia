@@ -15,6 +15,7 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 struct FGameplayTag;
+struct FKey;
 
 UCLASS()
 class PLOTOPIA_API AGAS_PlayerController : public APlayerController
@@ -36,6 +37,20 @@ public:
 	/** Spawn a world item into the world (used when discarding from inventory) */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	AActor* SpawnDroppedItem(FName ItemID, int32 Quantity, const FVector& DropLocation, const FRotator& DropRotation = FRotator::ZeroRotator);
+
+	// ==================== 快捷栏直接使用（不用打开背包） ====================
+	/**
+	 * 使用当前“选中快捷栏槽位”里的物品（消耗品）。
+	 * 默认绑定鼠标右键（在 SetupInputComponent 里绑定，无需配置任何输入资源）；
+	 * 若想在 BP 里改成别的键/手柄键：给 UseItemAction 指定一个 InputAction 并映射按键即可，
+	 * 指定后就走增强输入，鼠标右键的默认绑定自动失效。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+	bool UseSelectedHotbarItem();
+
+	/** 按索引选中快捷栏槽位（数字键 1~9 调用；也可在蓝图/UI 里直接调用） */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Hotbar")
+	void SelectHotbarSlotByIndex(int32 SlotIndex);
 
 	/**
 	 * 服务器→所属客户端：推送完整背包状态（可靠）。
@@ -80,6 +95,16 @@ private:
 
 	UPROPERTY(EditDefaultsOnly,Category="GAS|Input|Hotbar")
 	TObjectPtr<UInputAction> MouseWheelAction;
+
+	/** 可选：快捷栏“使用物品”的输入动作。留空 = 默认绑定鼠标右键 */
+	UPROPERTY(EditDefaultsOnly,Category="GAS|Input|Hotbar")
+	TObjectPtr<UInputAction> UseItemAction;
+
+	/** 输入回调（输入绑定要求返回 void） */
+	void OnUseItemInput();
+
+	/** 数字键 1~9 选择快捷栏槽位（同一个处理函数按 FKey 分发，参数按委托签名传值） */
+	void OnHotbarNumberKey(FKey Key);
 
 	void Interact();
 	void TraceForItem();

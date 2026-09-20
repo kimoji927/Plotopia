@@ -9,6 +9,7 @@ namespace GASTags
 		UE_DEFINE_GAMEPLAY_TAG_COMMENT(Projectile,"GASTags.SetByCaller.Projectile","Tag for Set by Caller Magnitude for Projectiles.");
 		UE_DEFINE_GAMEPLAY_TAG_COMMENT(Melee,"GASTags.SetByCaller.Melee","Tag for Set by Caller Data Tag for Melee Attack.");
 		UE_DEFINE_GAMEPLAY_TAG_COMMENT(Secondary,"GASTags.SetByCaller.Secondary","Tag for Set by Caller Data Tag for Secondary Attack.");
+		UE_DEFINE_GAMEPLAY_TAG_COMMENT(Consume,"GASTags.SetByCaller.Consume","Tag for Set by Caller Magnitude for Consumable Items (e.g. health potion).");
 	}
 	
 	namespace GASAbilities
@@ -41,6 +42,7 @@ namespace GASTags
 			UE_DEFINE_GAMEPLAY_TAG_COMMENT(Secondary,"GASTags.GASEvents.Player.Secondary","Tag for the Secondary Event")
 			UE_DEFINE_GAMEPLAY_TAG_COMMENT(HitReact,"GASTags.GASEvents.Player.HitReact","Tag for the Player HitReact Event")
 			UE_DEFINE_GAMEPLAY_TAG_COMMENT(Death,"GASTags.GASEvents.Player.Death","Tag for the Player Death Event")
+			UE_DEFINE_GAMEPLAY_TAG_COMMENT(ConsumeItem,"GASTags.GASEvents.Player.ConsumeItem","Tag for the Player ConsumeItem Event (fired when an inventory consumable is used)")
 		}
 		
 		namespace Enemy

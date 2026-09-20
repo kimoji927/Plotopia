@@ -1,6 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Items/Components/Inv_InventoryComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "AbilitySystemComponent.h"
+#include "Characters/GAS_BaseCharacter.h"
+#include "GameplayEffect.h"
+#include "GameplayTags/GASTags.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/GAS_PlayerController.h"
 
@@ -49,6 +54,9 @@ void UInv_InventoryComponent::InitializeInventory(int32 InMaxSlots, int32 InHotb
 	MaxSlots = InMaxSlots;
 	HotbarSlotCount = InHotbarCount;
 	ItemDataTable = InDataTable;
+
+	// 数据表可能已更换：物品行缓存必须失效
+	ItemDataRowCache.Empty();
 
 	InitializeSlots();
 }
@@ -379,6 +387,303 @@ void UInv_InventoryComponent::SetBackpackEquipped(bool bEquipped)
 void UInv_InventoryComponent::Server_SetBackpackEquipped_Implementation(bool bEquipped)
 {
 	SetBackpackEquipped(bEquipped);
+}
+
+// ==================== 消耗品使用（右键使用 / GAS） ====================
+
+bool UInv_InventoryComponent::GetCachedItemDataRow(FName ItemID, FInv_ItemDataRow& OutRow)
+{
+	if (ItemID == NAME_None) return false;
+
+	// 命中缓存：DataTable 查找 + 结构体拷贝（含TArray/TSoftObjectPtr）对每帧UI刷新来说太贵
+	if (const FInv_ItemDataRow* Cached = ItemDataRowCache.Find(ItemID))
+	{
+		OutRow = *Cached;
+		return true;
+	}
+
+	if (!ItemDataTable) return false;
+
+	static const FString ContextStr(TEXT("Inv_InventoryComponent::GetItemDataRow"));
+	if (const FInv_ItemDataRow* Row = ItemDataTable->FindRow<FInv_ItemDataRow>(ItemID, ContextStr))
+	{
+		OutRow = *Row;
+		ItemDataRowCache.Add(ItemID, OutRow);
+		return true;
+	}
+	return false;
+}
+
+bool UInv_InventoryComponent::GetItemDataRow(FName ItemID, FInv_ItemDataRow& OutRow)
+{
+	return GetCachedItemDataRow(ItemID, OutRow);
+}
+
+bool UInv_InventoryComponent::IsConsumableItem(FName ItemID)
+{
+	FInv_ItemDataRow Row;
+	return GetCachedItemDataRow(ItemID, Row) && Row.IsConsumable();
+}
+
+UAbilitySystemComponent* UInv_InventoryComponent::GetOwnerAbilitySystemComponent() const
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner)) return nullptr;
+
+	// 本组件挂在玩家控制器上，而玩家ASC实际挂在 Pawn / PlayerState 上，这里统一解析出ASC
+	if (const APlayerController* PC = Cast<APlayerController>(Owner))
+	{
+		if (APawn* Pawn = PC->GetPawn())
+		{
+			if (UAbilitySystemComponent* PawnASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn))
+			{
+				return PawnASC;
+			}
+		}
+	}
+	return UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Owner);
+}
+
+bool UInv_InventoryComponent::IsOwnerAlive() const
+{
+	if (const APlayerController* PC = Cast<APlayerController>(GetOwner()))
+	{
+		if (const AGAS_BaseCharacter* BaseCharacter = Cast<AGAS_BaseCharacter>(PC->GetPawn()))
+		{
+			return BaseCharacter->IsAlive();
+		}
+	}
+	// 宿主不是玩家控制器/不是GAS角色时不做存活限制
+	return true;
+}
+
+bool UInv_InventoryComponent::CanUseItemAtSlot(int32 SlotIndex, FText& OutFailReason)
+{
+	OutFailReason = FText::GetEmpty();
+
+	if (!Items.IsValidIndex(SlotIndex))
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_BadSlot", "槽位无效");
+		return false;
+	}
+
+	const FInv_ItemInstance& Item = Items[SlotIndex];
+	if (!Item.IsValid())
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_EmptySlot", "该槽位没有物品");
+		return false;
+	}
+
+	FInv_ItemDataRow Row;
+	if (!GetCachedItemDataRow(Item.ItemID, Row))
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NoRow", "找不到该物品的数据行（DT_Items）");
+		return false;
+	}
+
+	if (!Row.IsConsumable())
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NotConsumable", "该物品不是消耗品");
+		return false;
+	}
+
+	if (Row.bConsumeOnUse && Item.Quantity < FMath::Max(1, Row.ConsumeCount))
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NotEnough", "数量不足");
+		return false;
+	}
+
+	if (bBlockUseWhenDead && !IsOwnerAlive())
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_Dead", "已死亡，无法使用物品");
+		return false;
+	}
+
+	if (!GetOwnerAbilitySystemComponent())
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NoASC", "能力系统（ASC）未初始化");
+		return false;
+	}
+
+	return true;
+}
+
+int32 UInv_InventoryComponent::ApplyConsumeEffects(UAbilitySystemComponent* ASC, const FInv_ItemDataRow& Row)
+{
+	if (!IsValid(ASC)) return 0;
+
+	// 效果来源：物品行优先；行内为空时使用组件上的兜底效果（方便全局统一配置）
+	// → 想换成别的效果（回蓝/加速/加护盾…）只需要改这里的GE，不需要改C++代码
+	TArray<TSubclassOf<UGameplayEffect>> Effects;
+	for (const TSubclassOf<UGameplayEffect>& EffectClass : Row.ConsumeEffects)
+	{
+		if (EffectClass) Effects.Add(EffectClass);
+	}
+	if (Effects.Num() == 0 && DefaultConsumeEffect)
+	{
+		Effects.Add(DefaultConsumeEffect);
+	}
+	if (Effects.Num() == 0) return 0;
+
+	// SetByCaller 数值/标签：物品行 → 组件兜底 → 原生标签
+	const float Magnitude = Row.ConsumeMagnitude > 0.f ? Row.ConsumeMagnitude : DefaultConsumeMagnitude;
+	FGameplayTag MagnitudeTag = Row.ConsumeMagnitudeTag;
+	if (!MagnitudeTag.IsValid()) MagnitudeTag = DefaultConsumeMagnitudeTag;
+	if (!MagnitudeTag.IsValid()) MagnitudeTag = GASTags::SetByCaller::Consume;
+
+	const float Level = Row.ConsumeEffectLevel > 0.f ? Row.ConsumeEffectLevel : 1.f;
+
+	AActor* AvatarActor = ASC->GetAvatarActor();
+	AActor* Causer = IsValid(AvatarActor) ? AvatarActor : GetOwner();
+	AActor* InstigatorActor = IsValid(GetOwner()) ? GetOwner() : Causer;
+
+	int32 AppliedCount = 0;
+	for (const TSubclassOf<UGameplayEffect>& EffectClass : Effects)
+	{
+		FGameplayEffectContextHandle ContextHandle = ASC->MakeEffectContext();
+		ContextHandle.AddInstigator(InstigatorActor, Causer);
+		ContextHandle.AddSourceObject(this);
+
+		const FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(EffectClass, Level, ContextHandle);
+		if (!SpecHandle.IsValid() || !SpecHandle.Data.IsValid()) continue;
+
+		// 数值接口：GE 里用 “Set by Caller” 修饰符 + MagnitudeTag 即可读取（回血量自由调）
+		if (Magnitude > 0.f && MagnitudeTag.IsValid())
+		{
+			SpecHandle.Data->SetSetByCallerMagnitude(MagnitudeTag, Magnitude);
+		}
+
+		// 只有真正生效的效果才计数（被 BlockedTags/免疫等挡下的GE返回未成功应用）
+		const FActiveGameplayEffectHandle AppliedHandle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		if (AppliedHandle.WasSuccessfullyApplied())
+		{
+			++AppliedCount;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Inv][Consume] GameplayEffect %s 未能生效（可能被BlockedTags/免疫挡住）"), *EffectClass->GetName());
+		}
+	}
+	return AppliedCount;
+}
+
+bool UInv_InventoryComponent::PerformUseItemAtSlot(int32 SlotIndex, FText& OutFailReason)
+{
+	if (!HasAuthority())
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NotAuthority", "使用物品只能在服务器执行");
+		return false;
+	}
+
+	if (!CanUseItemAtSlot(SlotIndex, OutFailReason)) return false;
+
+	UAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
+	if (!IsValid(ASC))
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NoASC", "能力系统（ASC）未初始化");
+		return false;
+	}
+
+	// 物品ID先拷出来：下面广播/扣除都可能改动 Items 数组
+	const FName ItemID = Items[SlotIndex].ItemID;
+
+	FInv_ItemDataRow Row;
+	if (!GetCachedItemDataRow(ItemID, Row))
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NoRow", "找不到该物品的数据行（DT_Items）");
+		return false;
+	}
+
+	// 1) GAS核心：应用物品行里配置的GameplayEffect（回血 / 回蓝 / 加Buff…完全数据驱动）
+	const int32 AppliedCount = ApplyConsumeEffects(ASC, Row);
+
+	// 2) 可选表现：GameplayCue（必须以 GameplayCue. 开头才会生效）
+	const FGameplayTag CueTag = Row.ConsumeCueTag;
+	const bool bHasCue = CueTag.IsValid() && CueTag.ToString().StartsWith(TEXT("GameplayCue."));
+	if (bHasCue)
+	{
+		FGameplayCueParameters CueParams;
+		CueParams.Instigator = IsValid(ASC->GetAvatarActor()) ? ASC->GetAvatarActor() : GetOwner();
+		CueParams.EffectCauser = GetOwner();
+		CueParams.SourceObject = this;
+		ASC->ExecuteGameplayCue(CueTag, CueParams);
+	}
+
+	// 3) 可选事件：把“使用了某物品”广播给GAS能力层（蓝图能力用 WaitGameplayEvent 监听该标签做动画/音效）
+	const FGameplayTag EventTag = Row.ConsumeEventTag;
+	if (EventTag.IsValid())
+	{
+		FGameplayEventData Payload;
+		Payload.EventTag = EventTag;
+		Payload.Instigator = GetOwner();
+		Payload.Target = ASC->GetAvatarActor();
+		Payload.OptionalObject = this;
+		Payload.EventMagnitude = static_cast<float>(SlotIndex);
+		ASC->HandleGameplayEvent(EventTag, &Payload);
+	}
+
+	// 既没有效果、也没有事件/Cue：视为配置缺失/被挡住，直接失败（避免白白吃掉一个物品）
+	if (AppliedCount == 0 && !bHasCue && !EventTag.IsValid())
+	{
+		OutFailReason = NSLOCTEXT("Inventory", "UseItem_NoEffect", "该消耗品未配置使用效果，或效果全部未能生效（检查 ConsumeEffects / ConsumeCueTag / ConsumeEventTag）");
+		return false;
+	}
+
+	// 4) 扣除物品（可在数据行里关掉，做成可重复使用的道具）
+	if (Row.bConsumeOnUse && Items.IsValidIndex(SlotIndex))
+	{
+		const int32 ConsumeAmount = FMath::Max(1, Row.ConsumeCount);
+		FInv_ItemInstance& Item = Items[SlotIndex];
+		Item.Quantity -= ConsumeAmount;
+		if (Item.Quantity <= 0)
+		{
+			Item = FInv_ItemInstance::EmptySlot();
+		}
+
+		RebuildCache();
+		BroadcastUpdate(SlotIndex);
+	}
+
+	OnItemUsed.Broadcast(ItemID, SlotIndex, true);
+	OnItemUsedBP(ItemID, SlotIndex);
+
+	UE_LOG(LogTemp, Log, TEXT("[Inv][Consume] %s 使用槽位 %d 的物品 %s（应用效果 %d 个）"),
+		*GetName(), SlotIndex, *ItemID.ToString(), AppliedCount);
+	return true;
+}
+
+bool UInv_InventoryComponent::UseItemAtSlot(int32 SlotIndex)
+{
+	if (!HasAuthority())
+	{
+		// 客户端：只做最基本的槽位校验，权威判定交给服务器
+		if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid())
+		{
+			OnItemUsed.Broadcast(NAME_None, SlotIndex, false);
+			return false;
+		}
+		Server_UseItemAtSlot(SlotIndex);
+		return true;
+	}
+
+	FText FailReason;
+	const bool bSuccess = PerformUseItemAtSlot(SlotIndex, FailReason);
+	if (!bSuccess)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Inv][Consume] 使用槽位 %d 失败：%s"), SlotIndex, *FailReason.ToString());
+		OnItemUsed.Broadcast(Items.IsValidIndex(SlotIndex) ? Items[SlotIndex].ItemID : NAME_None, SlotIndex, false);
+	}
+	return bSuccess;
+}
+
+void UInv_InventoryComponent::Server_UseItemAtSlot_Implementation(int32 SlotIndex)
+{
+	UseItemAtSlot(SlotIndex);
+}
+
+bool UInv_InventoryComponent::UseSelectedHotbarItem()
+{
+	return UseItemAtSlot(SelectedSlotIndex);
 }
 
 void UInv_InventoryComponent::SwapItems(int32 SlotIndexA, int32 SlotIndexB)

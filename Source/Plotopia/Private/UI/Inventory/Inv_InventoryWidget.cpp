@@ -367,6 +367,7 @@ void UInv_InventoryWidget::ClearSelection()
 	if (DetailNameText) DetailNameText->SetText(FText::GetEmpty());
 	if (DetailDescriptionText) DetailDescriptionText->SetText(FText::GetEmpty());
 	if (DetailQuantityText) DetailQuantityText->SetVisibility(ESlateVisibility::Collapsed);
+	if (DetailUseHintText) DetailUseHintText->SetVisibility(ESlateVisibility::Collapsed);
 	SelectedSlotIndex = -1;
 	if (DetailPanel)
 	{
@@ -405,13 +406,27 @@ void UInv_InventoryWidget::UpdateDetailPanel(int32 SlotIndex)
 		if (ItemDataRow.CanStack())
 		{
 			DetailQuantityText->SetText(FText::Format(
-				NSLOCTEXT("Inventory", "QuantityFormat", "Quantity: {0}"),
-				FText::AsNumber(Item.Quantity)));
+				NSLOCTEXT("Inventory", "QuantityFormat", "数量: {0}"),
+				FText::AsNumber(Item.Quantity )));
 			DetailQuantityText->SetVisibility(ESlateVisibility::Visible);
 		}
 		else
 		{
 			DetailQuantityText->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+
+	// 消耗品：详情面板提示“右键使用”（WBP里没放 DetailUseHintText 也不会报错）
+	if (DetailUseHintText)
+	{
+		if (ItemDataRow.IsConsumable())
+		{
+			DetailUseHintText->SetText(NSLOCTEXT("Inventory", "UseItemHint", "右键使用"));
+			DetailUseHintText->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			DetailUseHintText->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 }
@@ -551,6 +566,29 @@ void UInv_InventoryWidget::RequestDropWithQuantity(int32 SlotIndex)
 
 	// 触发蓝图事件，让 WBP 弹出数量选择器
 	OnRequestDropQuantity(SlotIndex, Items[SlotIndex].Quantity);
+}
+
+// ==================== 消耗品使用 ====================
+
+bool UInv_InventoryWidget::UseItemAtSlot(int32 SlotIndex)
+{
+	if (!InventoryComponent) return false;
+
+	// 客户端：组件内部会自动路由到服务器执行（服务器权威 + 复制回UI）
+	return InventoryComponent->UseItemAtSlot(SlotIndex);
+}
+
+bool UInv_InventoryWidget::IsSlotConsumable(int32 SlotIndex) const
+{
+	if (!InventoryComponent) return false;
+
+	const TArray<FInv_ItemInstance>& Items = InventoryComponent->GetItems();
+	if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid())
+	{
+		return false;
+	}
+
+	return InventoryComponent->IsConsumableItem(Items[SlotIndex].ItemID);
 }
 
 int32 UInv_InventoryWidget::GetUsedSlotCount() const

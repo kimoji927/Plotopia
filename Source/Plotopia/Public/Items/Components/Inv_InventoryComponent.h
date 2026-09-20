@@ -9,8 +9,13 @@
 #include "Inv_InventoryComponent.generated.h"
 
 class FLifetimeProperty;
+class UAbilitySystemComponent;
+class UGameplayEffect;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventoryUpdated, const TArray<FInv_ItemInstance>&, Items, int32, ChangedSlotIndex);
+
+/** 消耗品使用结果（成功/失败都会广播，UI 可用于播放音效、飘字或提示） */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnItemUsed, FName, ItemID, int32, SlotIndex, bool, bSuccess);
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent), Blueprintable, BlueprintType)
 class PLOTOPIA_API UInv_InventoryComponent : public UActorComponent
@@ -34,6 +39,23 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Config")
 	bool bIsBackpackEquipped = false;
+
+	// ==================== 消耗品 / GAS 使用配置 ====================
+	/** 兜底使用效果：物品行未配置 ConsumeEffects 时使用（例如统一指定 GE_AddHealth） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Consumable")
+	TSubclassOf<UGameplayEffect> DefaultConsumeEffect;
+
+	/** 兜底 SetByCaller 数值（物品行 ConsumeMagnitude <= 0 时使用） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Consumable")
+	float DefaultConsumeMagnitude = 0.f;
+
+	/** 兜底 SetByCaller 标签（留空则回落到 GASTags.SetByCaller.Consume） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Consumable")
+	FGameplayTag DefaultConsumeMagnitudeTag;
+
+	/** 死亡后是否禁止使用物品 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Consumable")
+	bool bBlockUseWhenDead = true;
 
 	// ==================== Manual Initialization ====================
 	/** Initialize inventory with given parameters (call after creating component via NewObject) */
@@ -109,6 +131,47 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool IsBackpackEquipped() const { return bIsBackpackEquipped; }
 
+	// ==================== 消耗品使用（右键使用 / GAS） ====================
+	/**
+	 * 使用指定槽位中的物品（客户端调用自动路由到服务器执行）。
+	 * 服务器：按物品数据行里配置的 ConsumeEffects 应用 GameplayEffect（如回血），
+	 * 然后按 ConsumeCount 扣除物品，并通过 OnItemUsed 广播结果。
+	 * @return 客户端返回 true 表示请求已发出；服务器返回 true 表示本次使用成功。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+	bool UseItemAtSlot(int32 SlotIndex);
+
+	/** 使用“当前选中的快捷栏槽位”里的物品（HUD/蓝图一键调用，等价于 UseItemAtSlot(GetSelectedHotbarSlot())） */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+	bool UseSelectedHotbarItem();
+
+	UFUNCTION(Server, Reliable)
+	void Server_UseItemAtSlot(int32 SlotIndex);
+
+	/** 该槽位是否可以“右键使用”（OutFailReason 为不可用原因，供UI提示/置灰） */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+	bool CanUseItemAtSlot(int32 SlotIndex, FText& OutFailReason);
+
+	/** 物品是否为消耗品（读物品数据行的 bIsConsumable） */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Consumable")
+	bool IsConsumableItem(FName ItemID);
+
+	/** 取物品数据行（带缓存，避免每次刷新都查表） */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool GetItemDataRow(FName ItemID, FInv_ItemDataRow& OutRow);
+
+	/** 取所属玩家的能力系统组件（玩家的 ASC 挂在 PlayerState 上，这里做统一解析） */
+	UFUNCTION(BlueprintPure, Category = "Inventory|Consumable")
+	UAbilitySystemComponent* GetOwnerAbilitySystemComponent() const;
+
+	/** 使用物品成功/失败都会广播 */
+	UPROPERTY(BlueprintAssignable, Category = "Inventory|Events")
+	FOnItemUsed OnItemUsed;
+
+	/** 蓝图钩子：使用成功时触发（播放音效、飘字、特效等表现） */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory|Consumable")
+	void OnItemUsedBP(FName ItemID, int32 SlotIndex);
+
 	// ==================== Drag & Drop ====================
 	UFUNCTION(BlueprintCallable, Category = "Inventory|DragDrop")
 	void SwapItems(int32 SlotIndexA, int32 SlotIndexB);
@@ -161,6 +224,23 @@ protected:
 	void OnRep_Items();
 
 	static constexpr int32 DefaultMaxStackSize = 99;
+
+	// ==================== 消耗品内部实现 ====================
+	/** 服务器权威：真正执行使用逻辑（应用GE + 发送事件/Cue + 扣除物品 + 广播） */
+	bool PerformUseItemAtSlot(int32 SlotIndex, FText& OutFailReason);
+
+	/** 把物品行中配置的GameplayEffect应用到所属玩家身上，返回实际应用成功的效果数量 */
+	int32 ApplyConsumeEffects(UAbilitySystemComponent* ASC, const FInv_ItemDataRow& Row);
+
+	/** 所属玩家（Pawn）是否存活；非玩家控制器宿主时视为存活 */
+	bool IsOwnerAlive() const;
+
+	/** 带缓存的物品行查询 */
+	bool GetCachedItemDataRow(FName ItemID, FInv_ItemDataRow& OutRow);
+
+	/** 物品行缓存（InitializeInventory 时清空） */
+	UPROPERTY(Transient)
+	TMap<FName, FInv_ItemDataRow> ItemDataRowCache;
 
 	/** 本组件是否为服务器权威端（客户端调用会先路由到服务器） */
 	bool HasAuthority() const { return GetOwner() && GetOwner()->HasAuthority(); }

@@ -12,6 +12,8 @@ namespace GASTags
 		UE_DECLARE_GAMEPLAY_TAG_EXTERN(Projectile);
 		UE_DECLARE_GAMEPLAY_TAG_EXTERN(Melee);
 		UE_DECLARE_GAMEPLAY_TAG_EXTERN(Secondary);
+		/** 消耗品使用效果（回血/回蓝等）的 SetByCaller 数值标签 */
+		UE_DECLARE_GAMEPLAY_TAG_EXTERN(Consume);
 	}
 	
 	namespace GASAbilities
@@ -46,6 +48,8 @@ namespace GASTags
 			UE_DECLARE_GAMEPLAY_TAG_EXTERN(Secondary);
 			UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReact);
 			UE_DECLARE_GAMEPLAY_TAG_EXTERN(Death);
+			/** 背包消耗品被成功使用的事件标签 */
+			UE_DECLARE_GAMEPLAY_TAG_EXTERN(ConsumeItem);
 		}
 
 		namespace Enemy
